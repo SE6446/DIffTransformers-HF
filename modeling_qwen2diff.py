@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 Archie Macdonald and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
 # and OPT implementations in this library. It has been modified from its
@@ -17,7 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch Qwen2 model."""
+"""PyTorch Qwen2Diff model."""
 
 import math
 from typing import List, Optional, Tuple, Union
@@ -58,7 +58,7 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 
-from .configuration_qwen2diff import Qwen2Config
+from .configuration_qwen2diff import Qwen2DiffConfig
 
 
 if is_flash_attn_2_available():
@@ -68,15 +68,15 @@ if is_flash_attn_2_available():
 logger = logging.get_logger(__name__)
 
 
-_CHECKPOINT_FOR_DOC = "Qwen/Qwen2-7B"
-_CONFIG_FOR_DOC = "Qwen2Config"
+_CHECKPOINT_FOR_DOC = "Qwen/Qwen2Diff-7B"
+_CONFIG_FOR_DOC = "Qwen2DiffConfig"
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Qwen2
-class Qwen2RMSNorm(nn.Module):
+# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Qwen2Diff
+class Qwen2DiffRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        Qwen2RMSNorm is equivalent to T5LayerNorm
+        Qwen2DiffRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -93,8 +93,8 @@ class Qwen2RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Qwen2
-class Qwen2RotaryEmbedding(nn.Module):
+# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Qwen2Diff
+class Qwen2DiffRotaryEmbedding(nn.Module):
     def __init__(
         self,
         dim=None,
@@ -103,14 +103,14 @@ class Qwen2RotaryEmbedding(nn.Module):
         device=None,
         scaling_factor=1.0,
         rope_type="default",
-        config: Optional[Qwen2Config] = None,
+        config: Optional[Qwen2DiffConfig] = None,
     ):
         super().__init__()
         # TODO (joao): remove the `if` below, only used for BC
         self.rope_kwargs = {}
         if config is None:
             logger.warning_once(
-                "`Qwen2RotaryEmbedding` can now be fully parameterized by passing the model config through the "
+                "`Qwen2DiffRotaryEmbedding` can now be fully parameterized by passing the model config through the "
                 "`config` argument. All other arguments will be removed in v4.46"
             )
             self.rope_kwargs = {
@@ -217,8 +217,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Qwen2
-class Qwen2MLP(nn.Module):
+# Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Qwen2Diff
+class Qwen2DiffMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -245,13 +245,13 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-class Qwen2Attention(nn.Module):
+class Qwen2DiffAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
     and "Generating Long Sequences with Sparse Transformers".
     """
 
-    def __init__(self, config: Qwen2Config, layer_idx: Optional[int] = None):
+    def __init__(self, config: Qwen2DiffConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -282,7 +282,7 @@ class Qwen2Attention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
-        self.rotary_emb = Qwen2RotaryEmbedding(config=self.config)
+        self.rotary_emb = Qwen2DiffRotaryEmbedding(config=self.config)
 
     def forward(
         self,
@@ -373,7 +373,7 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 
-class Qwen2DifferentialAttention(Qwen2Attention):
+class Qwen2DiffDifferentialAttention(Qwen2DiffAttention):
     def __init__(self, config, layer_idx: int|None = None):
         super().__init__(config, layer_idx)
         self.lambda_q1 = nn.Parameter(torch.randn(config.num_attention_heads, self.head_dim))
@@ -476,9 +476,9 @@ class Qwen2DifferentialAttention(Qwen2Attention):
         return attn_output, attn_weights, past_key_value
 
 
-class Qwen2FlashAttention2(Qwen2Attention):
+class Qwen2DiffFlashAttention2(Qwen2DiffAttention):
     """
-    Qwen2 flash attention module, following Qwen2 attention module. This module inherits from `Qwen2Attention`
+    Qwen2Diff flash attention module, following Qwen2Diff attention module. This module inherits from `Qwen2DiffAttention`
     as the weights of the module stays untouched. The only required change would be on the forward pass
     where it needs to correctly call the public API of flash attention and deal with padding tokens
     in case the input contains any of them. Additionally, for sliding window attention, we apply SWA only to the bottom
@@ -586,14 +586,14 @@ class Qwen2FlashAttention2(Qwen2Attention):
         return attn_output, attn_weights, past_key_value
 
 
-class Qwen2SdpaAttention(Qwen2Attention):
+class Qwen2DiffSdpaAttention(Qwen2DiffAttention):
     """
-    Qwen2 attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
-    `Qwen2Attention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
+    Qwen2Diff attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
+    `Qwen2DiffAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
     SDPA API.
     """
 
-    # Adapted from Qwen2Attention.forward
+    # Adapted from Qwen2DiffAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -608,7 +608,7 @@ class Qwen2SdpaAttention(Qwen2Attention):
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
-                "Qwen2Model is using Qwen2SdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                "Qwen2DiffModel is using Qwen2DiffSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
                 'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
             )
             return super().forward(
@@ -676,14 +676,14 @@ class Qwen2SdpaAttention(Qwen2Attention):
 
 
 QWEN2_ATTENTION_CLASSES = {
-    "eager": Qwen2Attention,
-    "flash_attention_2": Qwen2FlashAttention2,
-    "sdpa": Qwen2SdpaAttention,
+    "eager": Qwen2DiffAttention,
+    "flash_attention_2": Qwen2DiffFlashAttention2,
+    "sdpa": Qwen2DiffSdpaAttention,
 }
 
 
-class Qwen2DecoderLayer(nn.Module):
-    def __init__(self, config: Qwen2Config, layer_idx: int):
+class Qwen2DiffDecoderLayer(nn.Module):
+    def __init__(self, config: Qwen2DiffConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -692,11 +692,11 @@ class Qwen2DecoderLayer(nn.Module):
                 f"Sliding Window Attention is enabled but not implemented for `{config._attn_implementation}`; "
                 "unexpected results may be encountered."
             )
-        self.self_attn = Qwen2DifferentialAttention(config, layer_idx) # I'll work on adding the other attention implementations later
+        self.self_attn = Qwen2DiffDifferentialAttention(config, layer_idx) # I'll work on adding the other attention implementations later
 
-        self.mlp = Qwen2MLP(config)
-        self.input_layernorm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.mlp = Qwen2DiffMLP(config)
+        self.input_layernorm = Qwen2DiffRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Qwen2DiffRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -776,7 +776,7 @@ QWEN2_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`Qwen2Config`]):
+        config ([`Qwen2DiffConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -784,14 +784,14 @@ QWEN2_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Qwen2 Model outputting raw hidden-states without any specific head on top.",
+    "The bare Qwen2Diff Model outputting raw hidden-states without any specific head on top.",
     QWEN2_START_DOCSTRING,
 )
-class Qwen2PreTrainedModel(PreTrainedModel):
-    config_class = Qwen2Config
+class Qwen2DiffPreTrainedModel(PreTrainedModel):
+    config_class = Qwen2DiffConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Qwen2DecoderLayer"]
+    _no_split_modules = ["Qwen2DiffDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -887,29 +887,29 @@ QWEN2_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Qwen2 Model outputting raw hidden-states without any specific head on top.",
+    "The bare Qwen2Diff Model outputting raw hidden-states without any specific head on top.",
     QWEN2_START_DOCSTRING,
 )
-class Qwen2Model(Qwen2PreTrainedModel):
+class Qwen2DiffModel(Qwen2DiffPreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Qwen2DecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Qwen2DiffDecoderLayer`]
 
     Args:
-        config: Qwen2Config
+        config: Qwen2DiffConfig
     """
 
-    def __init__(self, config: Qwen2Config):
+    def __init__(self, config: Qwen2DiffConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [Qwen2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [Qwen2DiffDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self._attn_implementation = config._attn_implementation
-        self.norm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = Qwen2RotaryEmbedding(config=config)
+        self.norm = Qwen2DiffRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = Qwen2DiffRotaryEmbedding(config=config)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -1124,7 +1124,7 @@ class Qwen2Model(Qwen2PreTrainedModel):
         return causal_mask
 
     @staticmethod
-    # Copied from transformers.models.mistral.modeling_mistral.MistralModel._prepare_4d_causal_attention_mask_with_cache_position with Mistral->Qwen2
+    # Copied from transformers.models.mistral.modeling_mistral.MistralModel._prepare_4d_causal_attention_mask_with_cache_position with Mistral->Qwen2Diff
     def _prepare_4d_causal_attention_mask_with_cache_position(
         attention_mask: torch.Tensor,
         sequence_length: int,
@@ -1133,7 +1133,7 @@ class Qwen2Model(Qwen2PreTrainedModel):
         device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
-        config: Qwen2Config,
+        config: Qwen2DiffConfig,
         past_key_values: Cache,
     ):
         """
@@ -1155,7 +1155,7 @@ class Qwen2Model(Qwen2PreTrainedModel):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
                 Batch size.
-            config (`Qwen2Config`):
+            config (`Qwen2DiffConfig`):
                 The model's configuration class
             past_key_values (`Cache`):
                 The cache class that is being used currently to generate
@@ -1192,13 +1192,13 @@ class Qwen2Model(Qwen2PreTrainedModel):
         return causal_mask
 
 
-class Qwen2ForCausalLM(Qwen2PreTrainedModel, GenerationMixin):
+class Qwen2DiffForCausalLM(Qwen2DiffPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = Qwen2Model(config)
+        self.model = Qwen2DiffModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -1258,9 +1258,9 @@ class Qwen2ForCausalLM(Qwen2PreTrainedModel, GenerationMixin):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, Qwen2ForCausalLM
+        >>> from transformers import AutoTokenizer, Qwen2DiffForCausalLM
 
-        >>> model = Qwen2ForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+        >>> model = Qwen2DiffForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
         >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
@@ -1315,9 +1315,9 @@ class Qwen2ForCausalLM(Qwen2PreTrainedModel, GenerationMixin):
 
 @add_start_docstrings(
     """
-    The Qwen2 Model transformer with a sequence classification head on top (linear layer).
+    The Qwen2Diff Model transformer with a sequence classification head on top (linear layer).
 
-    [`Qwen2ForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    [`Qwen2DiffForSequenceClassification`] uses the last token in order to do the classification, as other causal models
     (e.g. GPT-2) do.
 
     Since it does classification on the last token, it requires to know the position of the last token. If a
@@ -1328,11 +1328,11 @@ class Qwen2ForCausalLM(Qwen2PreTrainedModel, GenerationMixin):
     """,
     QWEN2_START_DOCSTRING,
 )
-class Qwen2ForSequenceClassification(Qwen2PreTrainedModel):
+class Qwen2DiffForSequenceClassification(Qwen2DiffPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = Qwen2Model(config)
+        self.model = Qwen2DiffModel(config)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
@@ -1438,17 +1438,17 @@ class Qwen2ForSequenceClassification(Qwen2PreTrainedModel):
 
 @add_start_docstrings(
     """
-    The Qwen2 Model transformer with a token classification head on top (a linear layer on top of the hidden-states
+    The Qwen2Diff Model transformer with a token classification head on top (a linear layer on top of the hidden-states
     output) e.g. for Named-Entity-Recognition (NER) tasks.
     """,
     QWEN2_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Qwen2, LLAMA->QWEN2
-class Qwen2ForTokenClassification(Qwen2PreTrainedModel):
+# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Qwen2Diff, LLAMA->QWEN2
+class Qwen2DiffForTokenClassification(Qwen2DiffPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = Qwen2Model(config)
+        self.model = Qwen2DiffModel(config)
         if getattr(config, "classifier_dropout", None) is not None:
             classifier_dropout = config.classifier_dropout
         elif getattr(config, "hidden_dropout", None) is not None:
@@ -1527,19 +1527,19 @@ class Qwen2ForTokenClassification(Qwen2PreTrainedModel):
 
 @add_start_docstrings(
     """
-The Qwen2 Model transformer with a span classification head on top for extractive question-answering tasks like
+The Qwen2Diff Model transformer with a span classification head on top for extractive question-answering tasks like
 SQuAD (a linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     QWEN2_START_DOCSTRING,
 )
-# Copied from transformers.models.mistral.modeling_mistral.MistralForQuestionAnswering with Mistral->Qwen2, MISTRAL->QWEN2
-class Qwen2ForQuestionAnswering(Qwen2PreTrainedModel):
+# Copied from transformers.models.mistral.modeling_mistral.MistralForQuestionAnswering with Mistral->Qwen2Diff, MISTRAL->QWEN2
+class Qwen2DiffForQuestionAnswering(Qwen2DiffPreTrainedModel):
     base_model_prefix = "model"
 
-    # Copied from models.models.bloom.modeling_bloom.BloomForQuestionAnswering.__init__ with Bloom->Qwen2
+    # Copied from models.models.bloom.modeling_bloom.BloomForQuestionAnswering.__init__ with Bloom->Qwen2Diff
     def __init__(self, config):
         super().__init__(config)
-        self.model = Qwen2Model(config)
+        self.model = Qwen2DiffModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
 
         # Initialize weights and apply final processing
