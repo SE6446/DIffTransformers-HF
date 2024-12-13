@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 Archie Macdonald and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,18 +14,18 @@
 # limitations under the License.
 """Qwen2 model configuration"""
 
-from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
-from ...utils import logging
-
+from transformers.configuration_utils import PretrainedConfig
+from transformers.modeling_rope_utils import rope_config_validation
+from transformers.utils import logging
+import math
 
 logger = logging.get_logger(__name__)
 
 
-class Qwen2Config(PretrainedConfig):
+class Qwen2DiffConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen2Model`]. It is used to instantiate a
-    Qwen2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    This is the configuration class to store the configuration of a [`Qwen2DiffModel`]. It is used to instantiate a
+    Qwen2Diff model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
     Qwen2-7B-beta [Qwen/Qwen2-7B-beta](https://huggingface.co/Qwen/Qwen2-7B-beta).
 
@@ -126,7 +126,7 @@ class Qwen2Config(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "qwen2"
+    model_type = "qwen2diff"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     # Default tensor parallel plan for base model `Qwen2`
@@ -160,7 +160,7 @@ class Qwen2Config(PretrainedConfig):
         sliding_window=4096,
         max_window_layers=28,
         attention_dropout=0.0,
-        lamda_init=None,
+        lambda_init=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -186,7 +186,7 @@ class Qwen2Config(PretrainedConfig):
         self.rope_scaling = rope_scaling
         self.attention_dropout = attention_dropout
         if lambda_init == None:
-          self.lambda_init = [0.8 - 0.6 * math.exp(-0.3 * (l - 1)) for l in range(num_hidden_layers))]
+          self.lambda_init = [0.8 - 0.6 * math.exp(-0.3 * (l - 1)) for l in range(num_hidden_layers)]
         elif type(lambda_init) is list:
           self.lambda_init = lambda_init
         else:
